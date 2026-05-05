@@ -1,0 +1,2038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Word — KJV Listener</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f4f7fc;
+  --surface: #ffffff;
+  --border: #dce6f5;
+  --blue: #2563eb;
+  --blue-light: #eff4ff;
+  --blue-mid: #bfcffa;
+  --blue-dark: #1e40af;
+  --text: #111827;
+  --text-mid: #4b5563;
+  --text-dim: #9ca3af;
+  --green: #16a34a;
+  --red: #dc2626;
+  --radius: 16px;
+  --shadow: 0 2px 12px rgba(37,99,235,0.08);
+  --shadow-lg: 0 8px 32px rgba(37,99,235,0.14);
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+#app {
+  /* svh = small viewport height: excludes mobile browser toolbars always */
+  height: 100vh;
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Desktop: show app as a centered card */
+@media (min-width: 600px) {
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #e8eef8 0%, #dce6f5 100%);
+  }
+  #app {
+    height: min(820px, 96vh);
+    height: min(820px, 96svh);
+    border-radius: 28px;
+    box-shadow: 0 24px 80px rgba(37,99,235,0.18), 0 4px 24px rgba(37,99,235,0.10);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+}
+
+/* ── Header ── */
+header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 20px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+.logo-wrap { display: flex; flex-direction: column; gap: 1px; }
+.logo { font-family: 'Lora', serif; font-size: 20px; font-weight: 600; color: var(--blue); letter-spacing: 0.01em; }
+.logo-sub { font-size: 10px; font-weight: 500; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; }
+
+.header-actions { display: flex; align-items: center; gap: 10px; }
+
+.icon-btn {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 0.18s;
+  color: var(--text-mid);
+}
+.icon-btn:active { transform: scale(0.93); }
+.icon-btn:hover { border-color: var(--blue-mid); background: var(--blue-light); color: var(--blue); }
+.icon-btn svg { width: 18px; height: 18px; }
+
+/* ── Listening Status Bar ── */
+#listen-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #d1d5db;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.status-dot.live { background: var(--green); animation: pulse-dot 1.4s ease-in-out infinite; }
+.status-dot.error { background: var(--red); }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+#status-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-mid);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Transcript Strip ── */
+#transcript-wrap {
+  background: var(--blue-light);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 20px;
+  min-height: 42px;
+  flex-shrink: 0;
+  transition: background 0.3s;
+  display: none;
+}
+#transcript-wrap.active { display: block; }
+
+#transcript-text {
+  font-size: 12.5px;
+  color: var(--text-mid);
+  line-height: 1.55;
+  font-style: italic;
+}
+#transcript-text .hit { color: var(--blue); font-weight: 600; font-style: normal; }
+
+/* ── Main Area ── */
+#main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 14px 0;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+#main::-webkit-scrollbar { display: none; }
+
+/* ── Empty State ── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 52px 24px;
+  text-align: center;
+  gap: 12px;
+}
+
+.empty-icon {
+  width: 72px; height: 72px;
+  background: var(--blue-light);
+  border-radius: 24px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 4px;
+}
+.empty-icon svg { width: 32px; height: 32px; color: var(--blue); }
+
+.empty-title {
+  font-family: 'Lora', serif;
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.empty-sub {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.65;
+  max-width: 240px;
+}
+
+/* ── Verse Card ── */
+.verse-card {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+  animation: slideUp 0.35s cubic-bezier(0.16,1,0.3,1);
+}
+
+.verse-card.current { border-color: var(--blue); box-shadow: var(--shadow-lg), 0 0 0 1px rgba(37,99,235,0.1); }
+
+@keyframes slideUp {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.card-top {
+  padding: 14px 16px 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.verse-ref {
+  font-family: 'Lora', serif;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--blue);
+}
+
+.badge-live {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--blue);
+  background: var(--blue-light);
+  border: 1px solid var(--blue-mid);
+  border-radius: 20px;
+  padding: 3px 9px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.badge-ai {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7c3aed;
+  background: #f5f3ff;
+  border: 1px solid #c4b5fd;
+  border-radius: 20px;
+  padding: 3px 9px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.verse-card.ai-match {
+  border-color: #7c3aed;
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(124,58,237,0.1);
+}
+
+.ai-status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #7c3aed;
+  flex-shrink: 0;
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+.verse-body {
+  padding: 10px 16px 16px;
+  font-family: 'Lora', serif;
+  font-size: 16px;
+  font-weight: 400;
+  font-style: italic;
+  line-height: 1.8;
+  color: var(--text);
+}
+
+.verse-body.loading { font-style: normal; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; color: var(--text-dim); animation: shimmer 1.2s ease-in-out infinite; }
+
+@keyframes shimmer { 0%,100%{opacity:0.45} 50%{opacity:1} }
+
+/* ── Nav row ── */
+.nav-row {
+  display: flex;
+  border-top: 1px solid var(--border);
+}
+.nav-btn {
+  flex: 1;
+  padding: 11px 8px;
+  background: none;
+  border: none;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-mid);
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: background 0.18s, color 0.18s;
+}
+.nav-btn:hover, .nav-btn:active { background: var(--blue-light); color: var(--blue); }
+.nav-sep { width: 1px; background: var(--border); }
+
+/* ── History Cards ── */
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 4px 4px 8px;
+  margin-top: 4px;
+}
+
+.hist-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 0.18s, box-shadow 0.18s;
+  animation: slideUp 0.3s cubic-bezier(0.16,1,0.3,1);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.hist-card:active { border-color: var(--blue-mid); box-shadow: var(--shadow); }
+
+.hist-ref {
+  font-family: 'Lora', serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-mid);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.hist-text {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  font-style: italic;
+  line-height: 1.5;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* ── Bottom Mic Bar ── */
+#bottom-bar {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  /* Safe-area padding for iPhone home indicator + comfortable touch target */
+  padding: 12px 16px env(safe-area-inset-bottom, 16px);
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+/* Big mic button */
+#mic-btn {
+  width: 58px; height: 58px;
+  border-radius: 50%;
+  border: none;
+  background: var(--blue);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.22s;
+  position: relative;
+  box-shadow: 0 4px 16px rgba(37,99,235,0.35);
+  touch-action: manipulation;
+}
+#mic-btn:active { transform: scale(0.92); }
+#mic-btn.listening {
+  background: var(--red);
+  box-shadow: 0 4px 20px rgba(220,38,38,0.4);
+  animation: mic-pulse 1.8s ease-out infinite;
+}
+@keyframes mic-pulse {
+  0%,100% { box-shadow: 0 4px 20px rgba(220,38,38,0.4); }
+  50% { box-shadow: 0 0 0 14px rgba(220,38,38,0.06), 0 4px 20px rgba(220,38,38,0.3); }
+}
+#mic-btn svg { width: 24px; height: 24px; }
+
+.mic-meta { flex: 1; min-width: 0; }
+.mic-label { font-size: 13px; font-weight: 600; color: var(--text); }
+.mic-hint { font-size: 10.5px; color: var(--text-dim); margin-top: 2px; line-height: 1.3; }
+
+.bottom-actions { display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+.sm-btn {
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-mid);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s;
+  touch-action: manipulation;
+}
+.sm-btn:hover, .sm-btn:active { border-color: var(--blue-mid); color: var(--blue); background: var(--blue-light); }
+
+/* ── Sheet (Search + Index) ── */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17,24,39,0.35);
+  z-index: 40;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s;
+}
+.sheet-backdrop.open { opacity: 1; pointer-events: auto; }
+
+.sheet {
+  position: fixed;
+  left: 0; right: 0;
+  bottom: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--surface);
+  border-radius: 24px 24px 0 0;
+  z-index: 50;
+  transform: translateY(100%);
+  transition: transform 0.32s cubic-bezier(0.16,1,0.3,1);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -8px 40px rgba(37,99,235,0.1);
+}
+.sheet.open { transform: translateY(0); }
+
+.sheet-handle {
+  width: 40px; height: 4px;
+  background: var(--border);
+  border-radius: 4px;
+  margin: 12px auto 0;
+  flex-shrink: 0;
+}
+
+.sheet-header {
+  padding: 14px 20px 10px;
+  flex-shrink: 0;
+}
+
+.sheet-title { font-family: 'Lora', serif; font-size: 18px; font-weight: 600; color: var(--text); }
+
+/* Search input */
+.search-box {
+  margin: 0 20px 12px;
+  position: relative;
+  flex-shrink: 0;
+}
+.search-box input {
+  width: 100%;
+  padding: 12px 16px 12px 42px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+  outline: none;
+  transition: border-color 0.18s;
+}
+.search-box input:focus { border-color: var(--blue); background: #fff; }
+.search-box .search-ico {
+  position: absolute;
+  left: 14px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+}
+.search-box .search-ico svg { width: 16px; height: 16px; }
+
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 16px 32px;
+  scrollbar-width: none;
+}
+.sheet-body::-webkit-scrollbar { display: none; }
+
+/* Book index grid */
+.book-section { margin-bottom: 18px; }
+.book-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 8px 4px 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.book-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.book-item {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all 0.16s;
+  text-align: left;
+}
+.book-item:active, .book-item:hover { border-color: var(--blue-mid); background: var(--blue-light); color: var(--blue); }
+
+/* Quick search results */
+#search-results { padding: 0; }
+.search-result-item {
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.16s;
+}
+.search-result-item:hover, .search-result-item:active { background: var(--blue-light); }
+.sr-ref { font-family: 'Lora', serif; font-size: 15px; font-weight: 600; color: var(--blue); }
+.sr-hint { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+
+/* ── Drilldown Navigation ── */
+.drilldown-tab {
+  flex: 1;
+  padding: 12px 4px 10px;
+  background: none;
+  border: none;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.18s;
+  position: relative;
+  bottom: -1px;
+}
+.drilldown-tab.active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+}
+.drilldown-tab:disabled { opacity: 0.4; cursor: default; }
+
+.drill-chip {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blue);
+  background: var(--blue-light);
+  border: 1px solid var(--blue-mid);
+  border-radius: 20px;
+  padding: 4px 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  font-family: 'IBM Plex Sans', sans-serif;
+}
+
+.number-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  padding: 4px 0 16px;
+}
+.number-item {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-mid);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.number-item:active, .number-item:hover {
+  border-color: var(--blue);
+  background: var(--blue-light);
+  color: var(--blue);
+}
+.testament-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 10px 4px 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.book-list-item {
+  padding: 13px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.book-list-item:hover, .book-list-item:active {
+  background: var(--blue-light);
+  color: var(--blue);
+}
+
+#toast {
+  position: fixed;
+  bottom: 120px;
+  left: 50%;
+  transform: translateX(-50%) translateY(12px);
+  background: var(--text);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 9px 18px;
+  border-radius: 20px;
+  opacity: 0;
+  transition: all 0.25s;
+  white-space: nowrap;
+  z-index: 200;
+  pointer-events: none;
+  max-width: 80vw;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <header>
+    <div class="logo-wrap">
+      <div class="logo">Word</div>
+      <div class="logo-sub">KJV Bible Listener</div>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="ai-toggle-btn" onclick="toggleAi()" title="Toggle AI context detection" style="position:relative;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/><circle cx="18" cy="6" r="3" fill="currentColor" stroke="none" style="fill:#7c3aed"/></svg>
+        <span id="ai-indicator" style="position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:#7c3aed;border:1.5px solid #fff;"></span>
+      </button>
+      <button class="icon-btn" onclick="openIndex()" title="Bible Index">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      </button>
+      <button class="icon-btn" onclick="openSearch()" title="Search Verse">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Status Bar -->
+  <div id="listen-bar">
+    <div class="status-dot" id="status-dot"></div>
+    <div id="status-text">Tap the mic to start listening</div>
+  </div>
+
+  <!-- Speaker tip — shown once when listening starts near a PA system -->
+  <div id="speaker-tip" style="display:none; background:#fffbeb; border-bottom:1px solid #fde68a; padding:8px 16px; flex-shrink:0; align-items:center; gap:8px;">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span style="font-size:11.5px; color:#92400e; line-height:1.4;">Hold phone near the speaker or PA for best detection</span>
+    <button onclick="document.getElementById('speaker-tip').style.display='none'" style="margin-left:auto; background:none; border:none; color:#d97706; font-size:16px; cursor:pointer; padding:0 2px; line-height:1;">&times;</button>
+  </div>
+
+  <!-- Transcript -->
+  <div id="transcript-wrap">
+    <div id="transcript-text">Listening...</div>
+  </div>
+
+  <!-- Main verse area -->
+  <div id="main">
+    <div id="empty-state" class="empty-state">
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 6v12M15 6v12M3 6h18M3 12h18M3 18h18"/></svg>
+      </div>
+      <div class="empty-title">Ready to Listen</div>
+      <div class="empty-sub">Tap the mic and the pastor's Bible references will appear here automatically.</div>
+    </div>
+    <div id="verse-area"></div>
+  </div>
+
+  <!-- Bottom Bar -->
+  <div id="bottom-bar">
+    <button id="mic-btn" onclick="toggleListening()" title="Toggle microphone">
+      <svg id="mic-svg-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+        <line x1="12" y1="19" x2="12" y2="23"/>
+        <line x1="8" y1="23" x2="16" y2="23"/>
+      </svg>
+      <svg id="mic-svg-on" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+        <rect x="9" y="3" width="6" height="13" rx="3"/>
+        <path d="M5 10a7 7 0 0 0 14 0" fill="none" stroke="currentColor" stroke-width="2"/>
+        <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" stroke-width="2"/>
+        <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" stroke-width="2"/>
+      </svg>
+    </button>
+    <div class="mic-meta">
+      <div class="mic-label" id="mic-label">Start Listening</div>
+      <div class="mic-hint" id="mic-hint">Detects verses automatically</div>
+    </div>
+    <div class="bottom-actions">
+      <button class="sm-btn" onclick="openSearch()">Search</button>
+      <button class="sm-btn" onclick="clearAll()">Clear</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Sheet Backdrop -->
+<div class="sheet-backdrop" id="backdrop" onclick="closeSheet()"></div>
+
+<!-- Book / Chapter / Verse Drill-Down Sheet -->
+<div class="sheet" id="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-header" style="padding-bottom:0;">
+    <!-- Breadcrumb tabs -->
+    <div style="display:flex; gap:0; border-bottom:1px solid var(--border); margin: 0 -20px;">
+      <button id="tab-book" class="drilldown-tab active" onclick="goToTab('book')">BOOK</button>
+      <button id="tab-chapter" class="drilldown-tab" onclick="goToTab('chapter')" disabled>CHAPTER</button>
+      <button id="tab-verse" class="drilldown-tab" onclick="goToTab('verse')" disabled>VERSE</button>
+    </div>
+    <!-- Selected breadcrumb chips -->
+    <div id="drill-chips" style="display:flex; gap:6px; padding:10px 0 4px; min-height:38px; align-items:center;"></div>
+    <!-- Search input (book tab only) -->
+    <div class="search-box" id="search-box-wrap" style="margin:0 0 10px;">
+      <div class="search-ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </div>
+      <input type="text" id="search-input" placeholder='Search book or type "John 3:16"' oninput="onSearchInput()" autocomplete="off" autocorrect="off" spellcheck="false">
+    </div>
+  </div>
+  <div class="sheet-body" id="sheet-body">
+    <div id="drill-content"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ────────────────────────────────────────────────────────────
+// CONFIG — paste your Cloudflare Worker URL here after deploying
+// ────────────────────────────────────────────────────────────
+const AI_PROXY_URL = 'https://word-ai.YOUR-NAME.workers.dev'; // <-- UPDATE THIS
+
+// ────────────────────────────────────────────────────────────
+// STATE
+// ────────────────────────────────────────────────────────────
+let recognition = null;
+let isListening = false;
+let isFetching = false;
+let currentVerse = null;   // { book, chapter, verse, text }
+let verseHistory = [];     // array of { book, chapter, verse, text }
+let sheetMode = null;      // 'search' | 'index'
+let lastDetectedKey = '';  // prevent duplicate triggers
+
+// AI detection state
+let aiBuffer = '';           // accumulated sermon text for AI to analyze
+let aiDebounceTimer = null;  // debounce timer for AI calls
+let isAiChecking = false;    // prevent parallel AI calls
+let lastAiText = '';         // avoid re-sending same text
+let aiEnabled = true;        // user can toggle
+let candidateVerses = [];    // AI returned multiple candidates
+
+// ────────────────────────────────────────────────────────────
+// BOOKS MAP
+// ────────────────────────────────────────────────────────────
+const BOOK_API = {
+  'Genesis':'Genesis','Exodus':'Exodus','Leviticus':'Leviticus','Numbers':'Numbers',
+  'Deuteronomy':'Deuteronomy','Joshua':'Joshua','Judges':'Judges','Ruth':'Ruth',
+  '1Samuel':'1samuel','2Samuel':'2samuel','1Kings':'1kings','2Kings':'2kings',
+  '1Chronicles':'1chronicles','2Chronicles':'2chronicles','Ezra':'Ezra','Nehemiah':'Nehemiah',
+  'Esther':'Esther','Job':'Job','Psalms':'Psalms','Proverbs':'Proverbs',
+  'Ecclesiastes':'Ecclesiastes','SongOfSolomon':'Song of Solomon','Isaiah':'Isaiah',
+  'Jeremiah':'Jeremiah','Lamentations':'Lamentations','Ezekiel':'Ezekiel','Daniel':'Daniel',
+  'Hosea':'Hosea','Joel':'Joel','Amos':'Amos','Obadiah':'Obadiah','Jonah':'Jonah',
+  'Micah':'Micah','Nahum':'Nahum','Habakkuk':'Habakkuk','Zephaniah':'Zephaniah',
+  'Haggai':'Haggai','Zechariah':'Zechariah','Malachi':'Malachi','Matthew':'Matthew',
+  'Mark':'Mark','Luke':'Luke','John':'John','Acts':'Acts','Romans':'Romans',
+  '1Corinthians':'1corinthians','2Corinthians':'2corinthians','Galatians':'Galatians',
+  'Ephesians':'Ephesians','Philippians':'Philippians','Colossians':'Colossians',
+  '1Thessalonians':'1thessalonians','2Thessalonians':'2thessalonians','1Timothy':'1timothy',
+  '2Timothy':'2timothy','Titus':'Titus','Philemon':'Philemon','Hebrews':'Hebrews',
+  'James':'James','1Peter':'1peter','2Peter':'2peter','1John':'1john','2John':'2john',
+  '3John':'3john','Jude':'Jude','Revelation':'Revelation'
+};
+
+const OT_BOOKS = ['Genesis','Exodus','Leviticus','Numbers','Deuteronomy','Joshua','Judges','Ruth',
+  '1Samuel','2Samuel','1Kings','2Kings','1Chronicles','2Chronicles','Ezra','Nehemiah','Esther',
+  'Job','Psalms','Proverbs','Ecclesiastes','SongOfSolomon','Isaiah','Jeremiah','Lamentations',
+  'Ezekiel','Daniel','Hosea','Joel','Amos','Obadiah','Jonah','Micah','Nahum','Habakkuk',
+  'Zephaniah','Haggai','Zechariah','Malachi'];
+
+const NT_BOOKS = ['Matthew','Mark','Luke','John','Acts','Romans','1Corinthians','2Corinthians',
+  'Galatians','Ephesians','Philippians','Colossians','1Thessalonians','2Thessalonians',
+  '1Timothy','2Timothy','Titus','Philemon','Hebrews','James','1Peter','2Peter','1John',
+  '2John','3John','Jude','Revelation'];
+
+// Speech aliases -> canonical key
+const BOOK_ALIASES = {
+  'genesis':['genesis','gen'],
+  'Exodus':['exodus','exo','ex'],
+  'Leviticus':['leviticus','lev'],
+  'Numbers':['numbers','num','numb'],
+  'Deuteronomy':['deuteronomy','deut','deu'],
+  'Joshua':['joshua','josh'],
+  'Judges':['judges','judg'],
+  'Ruth':['ruth'],
+  '1Samuel':['1 samuel','first samuel','one samuel','1samuel'],
+  '2Samuel':['2 samuel','second samuel','two samuel','2samuel'],
+  '1Kings':['1 kings','first kings','one kings','1kings'],
+  '2Kings':['2 kings','second kings','two kings','2kings'],
+  '1Chronicles':['1 chronicles','first chronicles','one chronicles','1chronicles'],
+  '2Chronicles':['2 chronicles','second chronicles','two chronicles','2chronicles'],
+  'Ezra':['ezra'],
+  'Nehemiah':['nehemiah','neh'],
+  'Esther':['esther'],
+  'Job':['job'],
+  'Psalms':['psalms','psalm','psa','ps'],
+  'Proverbs':['proverbs','prov','pro'],
+  'Ecclesiastes':['ecclesiastes','eccl','ecc'],
+  'SongOfSolomon':['song of solomon','song of songs','song'],
+  'Isaiah':['isaiah','isa'],
+  'Jeremiah':['jeremiah','jer'],
+  'Lamentations':['lamentations','lam'],
+  'Ezekiel':['ezekiel','ezek','eze'],
+  'Daniel':['daniel','dan'],
+  'Hosea':['hosea','hos'],
+  'Joel':['joel'],
+  'Amos':['amos'],
+  'Obadiah':['obadiah','obad'],
+  'Jonah':['jonah','jon'],
+  'Micah':['micah','mic'],
+  'Nahum':['nahum','nah'],
+  'Habakkuk':['habakkuk','hab'],
+  'Zephaniah':['zephaniah','zeph'],
+  'Haggai':['haggai','hag'],
+  'Zechariah':['zechariah','zech'],
+  'Malachi':['malachi','mal'],
+  'Matthew':['matthew','matt','mat'],
+  'Mark':['mark','mrk'],
+  'Luke':['luke','luk'],
+  'John':['john','joh'],
+  'Acts':['acts','act'],
+  'Romans':['romans','rom'],
+  '1Corinthians':['1 corinthians','first corinthians','one corinthians','1corinthians'],
+  '2Corinthians':['2 corinthians','second corinthians','two corinthians','2corinthians'],
+  'Galatians':['galatians','gal'],
+  'Ephesians':['ephesians','eph'],
+  'Philippians':['philippians','phil','php'],
+  'Colossians':['colossians','col'],
+  '1Thessalonians':['1 thessalonians','first thessalonians','one thessalonians','1thessalonians'],
+  '2Thessalonians':['2 thessalonians','second thessalonians','two thessalonians','2thessalonians'],
+  '1Timothy':['1 timothy','first timothy','one timothy','1timothy'],
+  '2Timothy':['2 timothy','second timothy','two timothy','2timothy'],
+  'Titus':['titus'],
+  'Philemon':['philemon'],
+  'Hebrews':['hebrews','heb'],
+  'James':['james','jas'],
+  '1Peter':['1 peter','first peter','one peter','1peter'],
+  '2Peter':['2 peter','second peter','two peter','2peter'],
+  '1John':['1 john','first john','one john','1john'],
+  '2John':['2 john','second john','two john','2john'],
+  '3John':['3 john','third john','three john','3john'],
+  'Jude':['jude'],
+  'Revelation':['revelation','rev','revelations']
+};
+
+// Build flat sorted list of aliases (longest first)
+const ALIAS_LIST = [];
+for (const [bookKey, aliases] of Object.entries(BOOK_ALIASES)) {
+  for (const alias of aliases) {
+    ALIAS_LIST.push({ alias, bookKey });
+  }
+}
+ALIAS_LIST.sort((a, b) => b.alias.length - a.alias.length);
+
+const WORD_NUMS = {
+  'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,'eight':8,'nine':9,'ten':10,
+  'eleven':11,'twelve':12,'thirteen':13,'fourteen':14,'fifteen':15,'sixteen':16,'seventeen':17,
+  'eighteen':18,'nineteen':19,'twenty':20,'twenty one':21,'twenty two':22,'twenty three':23,
+  'twenty four':24,'twenty five':25,'twenty six':26,'twenty seven':27,'twenty eight':28,
+  'twenty nine':29,'thirty':30,'forty':40,'fifty':50,'sixty':60,'seventy':70,'eighty':80,
+  'ninety':90,'hundred':100,'a hundred':100,'one hundred':100,'one fifty':150
+};
+
+function wordsToNum(s) {
+  s = s.trim().toLowerCase();
+  if (/^\d+$/.test(s)) return parseInt(s);
+  if (WORD_NUMS[s] !== undefined) return WORD_NUMS[s];
+  const parts = s.split(/\s+/);
+  let total = 0;
+  for (const p of parts) { if (WORD_NUMS[p]) total += WORD_NUMS[p]; }
+  return total > 0 ? total : null;
+}
+
+// ────────────────────────────────────────────────────────────
+// FUZZY MATCHING HELPERS
+// ────────────────────────────────────────────────────────────
+
+// Levenshtein distance for fuzzy book name matching
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({length: m+1}, (_, i) => Array.from({length: n+1}, (_, j) => i === 0 ? j : j === 0 ? i : 0));
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++)
+    dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[m][n];
+}
+
+// How similar two strings are (0-1, higher = more similar)
+function similarity(a, b) {
+  if (a === b) return 1;
+  const longer = Math.max(a.length, b.length);
+  if (longer === 0) return 1;
+  return (longer - levenshtein(a, b)) / longer;
+}
+
+// Find best matching book key from a spoken word, with fuzzy tolerance
+function fuzzyBookMatch(word) {
+  if (!word || word.length < 2) return null;
+  word = word.toLowerCase().trim();
+
+  // First: exact alias match
+  for (const { alias, bookKey } of ALIAS_LIST) {
+    if (alias === word) return { bookKey, score: 1 };
+  }
+
+  // Second: starts-with match (prefix) — catches "detomy" starting like "deut"
+  for (const { alias, bookKey } of ALIAS_LIST) {
+    if (alias.length >= 3 && word.length >= 3) {
+      const minLen = Math.min(alias.length, word.length, 5);
+      if (alias.slice(0, minLen) === word.slice(0, minLen)) {
+        return { bookKey, score: 0.9 };
+      }
+    }
+  }
+
+  // Third: fuzzy similarity — catches "sam" for "samuel", "detomy" for "deuteronomy"
+  let best = null, bestScore = 0;
+  for (const { alias, bookKey } of ALIAS_LIST) {
+    // Only compare against aliases of similar length or if word is prefix of alias
+    if (Math.abs(alias.length - word.length) > 6) continue;
+    const sim = similarity(word, alias);
+    // Also check if word is contained in alias or alias starts with word
+    const startBonus = alias.startsWith(word.slice(0, Math.min(word.length, 4))) ? 0.15 : 0;
+    const score = sim + startBonus;
+    if (score > bestScore && score > 0.55) {
+      bestScore = score;
+      best = { bookKey, score };
+    }
+  }
+  return best;
+}
+
+// ────────────────────────────────────────────────────────────
+// DETECTION ENGINE (with fuzzy matching)
+// ────────────────────────────────────────────────────────────
+function detectVerse(rawText) {
+  const t = rawText.toLowerCase()
+    .replace(/\b(\d+)st\b/g, '$1').replace(/\b(\d+)nd\b/g, '$1')
+    .replace(/\b(\d+)rd\b/g, '$1').replace(/\b(\d+)th\b/g, '$1')
+    .replace(/[,;.!?]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // ── NAVIGATION — natural pastor language ──
+  // "next verse", "go forward", "continue", "verse after", etc.
+  if (/\b(next verse|verse next|go forward|go ahead|forward verse|move forward|continue to the next|following verse)\b/.test(t)) return { action: 'next' };
+  if (/\b(previous verse|last verse|prev verse|go back|back to the|verse before|prior verse|take me back|step back)\b/.test(t)) return { action: 'prev' };
+  if (/\bnext chapter\b/.test(t)) return { action: 'nextCh' };
+  if (/\b(previous chapter|last chapter|prior chapter|go back to chapter)\b/.test(t)) return { action: 'prevCh' };
+
+  // "go to verse 3" / "take me to verse 5" / "verse 12" / "read verse 8"
+  const gotoVerseM = t.match(/\b(?:go to|take me to|read|jump to|open)?\s*verse\s+(\d+)\b/);
+  if (gotoVerseM) return { action: 'gotoVerse', verse: parseInt(gotoVerseM[1]) };
+
+  // "go to chapter 6" / "chapter 6" / "take me to chapter 4"
+  const gotoChM = t.match(/\b(?:go to|take me to|jump to|open)?\s*chapter\s+(\d+)\b/);
+  if (gotoChM) return { action: 'gotoChapter', chapter: parseInt(gotoChM[1]) };
+
+  // "yes" / "yeah" — confirm top candidate
+  if (/^\s*(yes|yeah|yep|correct|that'?s? (the one|it)|right|confirm)\s*$/.test(t)) return { action: 'confirm' };
+
+  const numWord = '(?:' + Object.keys(WORD_NUMS).sort((a,b)=>b.length-a.length).join('|') + '|\\d+)';
+
+  // ── EXACT ALIAS MATCH (original logic) ──
+  for (const { alias, bookKey } of ALIAS_LIST) {
+    const idx = t.indexOf(alias);
+    if (idx === -1) continue;
+    const before = idx > 0 ? t[idx - 1] : ' ';
+    if (/[a-z]/.test(before)) continue;
+
+    const after = t.slice(idx + alias.length).trim();
+    const result = extractChapterVerse(after, numWord, bookKey);
+    if (result) return result;
+  }
+
+  // ── FUZZY MATCH: try each word / bigram / trigram in the transcript ──
+  const words = t.split(/\s+/);
+  for (let i = 0; i < words.length; i++) {
+    // Try single word, then 2-word, then 3-word combos for multi-word books
+    for (let len = 1; len <= 3 && i + len <= words.length; len++) {
+      const phrase = words.slice(i, i + len).join(' ');
+      if (phrase.length < 2) continue;
+
+      const match = fuzzyBookMatch(phrase);
+      if (!match) continue;
+
+      // Make sure what comes after looks like chapter:verse numbers
+      const afterWords = words.slice(i + len).join(' ').trim();
+      const result = extractChapterVerse(afterWords, numWord, match.bookKey);
+      if (result) {
+        result.fuzzy = true;
+        return result;
+      }
+    }
+  }
+
+  return null;
+}
+
+// Extract chapter and verse from the text that follows a book name
+function extractChapterVerse(after, numWord, bookKey) {
+  const patterns = [
+    /^(\d+)\s*:\s*(\d+)/,
+    /^chapter\s+(\d+)\s+verse\s+(\d+)/i,
+    /^ch\.?\s*(\d+)\s+v\.?\s*(\d+)/i,
+    /^(\d+)\s+(\d+)(?!\d)/,
+    new RegExp('^(' + numWord + ')\\s+(?:verse\\s+)?(' + numWord + ')\\s*', 'i'),
+  ];
+  for (const pat of patterns) {
+    const m = after.match(pat);
+    if (m) {
+      const ch = wordsToNum(m[1]);
+      const vs = wordsToNum(m[2]);
+      if (ch && vs) return { bookKey, chapter: ch, verse: vs };
+    }
+  }
+  // Chapter only
+  const chOnly = after.match(/^(?:chapter\s+)?(\d+)(?:\s|$)/i);
+  if (chOnly) {
+    const ch = parseInt(chOnly[1]);
+    if (ch) return { bookKey, chapter: ch, verse: 1 };
+  }
+  return null;
+}
+
+// ────────────────────────────────────────────────────────────
+// API
+// ────────────────────────────────────────────────────────────
+async function fetchVerse(bookKey, chapter, verse) {
+  const bookStr = BOOK_API[bookKey] || bookKey;
+  const ref = `${encodeURIComponent(bookStr)}+${chapter}:${verse}`;
+  const url = `https://bible-api.com/${ref}?translation=kjv`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Not found');
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return (data.text || data.verses?.[0]?.text || '').trim();
+}
+
+// ────────────────────────────────────────────────────────────
+// VERSE ACTIONS
+// ────────────────────────────────────────────────────────────
+function displayName(bookKey) {
+  // Convert "1Samuel" -> "1 Samuel", "SongOfSolomon" -> "Song of Solomon"
+  return bookKey
+    .replace(/^(\d)/, '$1 ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace('Of', 'of');
+}
+
+function formatRef(v) {
+  return `${displayName(v.bookKey)} ${v.chapter}:${v.verse}`;
+}
+
+async function goToVerse(bookKey, chapter, verse, addHistory = true, aiMatch = false) {
+  if (isFetching) return;
+  isFetching = true;
+
+  // Dedup
+  const key = `${bookKey}${chapter}:${verse}`;
+  if (currentVerse && `${currentVerse.bookKey}${currentVerse.chapter}:${currentVerse.verse}` === key) {
+    isFetching = false;
+    return;
+  }
+
+  if (addHistory && currentVerse?.text) {
+    verseHistory.push({ ...currentVerse });
+    if (verseHistory.length > 25) verseHistory.shift();
+  }
+
+  currentVerse = { bookKey, chapter, verse, text: null, aiMatch };
+  renderVerses();
+  setStatus(`Loading ${formatRef(currentVerse)}...`, 'live');
+
+  try {
+    const text = await fetchVerse(bookKey, chapter, verse);
+    currentVerse.text = text;
+    const el = document.getElementById('current-text');
+    if (el) { el.textContent = text; el.classList.remove('loading'); }
+    setStatus(`${formatRef(currentVerse)}`, 'live');
+    toast(`${formatRef(currentVerse)}`);
+    saveSession();
+    // Add adjacent strip now that text is loaded
+    const area = document.getElementById('verse-area');
+    let strip = document.getElementById('adjacent-strip');
+    if (!strip) {
+      strip = document.createElement('div');
+      strip.id = 'adjacent-strip';
+      strip.style.cssText = 'display:flex; gap:8px; margin-bottom:12px;';
+      // Insert after the current card (first child)
+      if (area.firstChild) area.firstChild.after(strip);
+      else area.appendChild(strip);
+    }
+    prefetchAdjacent(bookKey, chapter, verse);
+  } catch (e) {
+    const msg = 'Verse not found. Try another reference.';
+    currentVerse.text = msg;
+    const el = document.getElementById('current-text');
+    if (el) { el.textContent = msg; el.classList.remove('loading'); }
+    setStatus('Verse not found', 'error');
+  }
+
+  isFetching = false;
+}
+
+async function navVerse(dir) {
+  if (!currentVerse) return;
+  let { bookKey, chapter, verse } = currentVerse;
+  verse += dir;
+  if (verse < 1) {
+    chapter--;
+    if (chapter < 1) { toast('Beginning of this book'); return; }
+    verse = 200; // API will correct
+  }
+  await goToVerse(bookKey, chapter, verse, false);
+}
+
+async function navChapter(dir) {
+  if (!currentVerse) return;
+  let { bookKey, chapter } = currentVerse;
+  chapter += dir;
+  if (chapter < 1) { toast('Beginning of this book'); return; }
+  await goToVerse(bookKey, chapter, 1, false);
+}
+
+function clearAll() {
+  verseHistory = [];
+  currentVerse = null;
+  lastDetectedKey = '';
+  aiBuffer = '';
+  lastAiText = '';
+  adjacentVerses = { prev: null, next: null };
+  clearTimeout(aiDebounceTimer);
+  const picker = document.getElementById('candidate-picker');
+  if (picker) picker.remove();
+  try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+  renderVerses();
+  setStatus('Cleared. Tap the mic to listen.');
+}
+
+// ────────────────────────────────────────────────────────────
+// MEMORY (localStorage)
+// ────────────────────────────────────────────────────────────
+const STORAGE_KEY = 'word_kjv_session';
+
+function saveSession() {
+  try {
+    const data = {
+      currentVerse,
+      verseHistory: verseHistory.slice(-50),
+      savedAt: Date.now()
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch(e) {}
+}
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    // Only restore if saved within last 24 hours
+    if (Date.now() - data.savedAt > 86400000) return;
+    if (data.verseHistory?.length) verseHistory = data.verseHistory;
+    if (data.currentVerse?.bookKey) {
+      currentVerse = data.currentVerse;
+      renderVerses();
+      setStatus(`Restored: ${formatRef(currentVerse)}`);
+      toast(`Session restored — ${formatRef(currentVerse)}`);
+    }
+  } catch(e) {}
+}
+
+// ────────────────────────────────────────────────────────────
+// ADJACENT VERSE CACHE (for instant preview)
+// ────────────────────────────────────────────────────────────
+let adjacentVerses = { prev: null, next: null }; // { text, ref }
+
+async function prefetchAdjacent(bookKey, chapter, verse) {
+  adjacentVerses = { prev: null, next: null };
+  const vc = getVerseCount(bookKey, chapter);
+
+  const tasks = [];
+  // Prev
+  if (verse > 1) {
+    tasks.push(fetchVerse(bookKey, chapter, verse - 1).then(t => {
+      adjacentVerses.prev = { bookKey, chapter, verse: verse - 1, text: t };
+    }).catch(() => {}));
+  }
+  // Next
+  if (verse < vc) {
+    tasks.push(fetchVerse(bookKey, chapter, verse + 1).then(t => {
+      adjacentVerses.next = { bookKey, chapter, verse: verse + 1, text: t };
+    }).catch(() => {}));
+  }
+  await Promise.all(tasks);
+  // Re-render adjacent strip if current verse is still the same
+  const strip = document.getElementById('adjacent-strip');
+  if (strip) renderAdjacentStrip(strip);
+}
+
+function renderAdjacentStrip(container) {
+  container.innerHTML = '';
+  const make = (v, label) => {
+    if (!v) return;
+    const el = document.createElement('div');
+    el.style.cssText = `
+      background: var(--bg); border: 1.5px solid var(--border); border-radius: 12px;
+      padding: 10px 12px; cursor: pointer; transition: all 0.16s; flex: 1;
+    `;
+    el.innerHTML = `
+      <div style="font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-dim); margin-bottom:4px;">${label}</div>
+      <div style="font-family:'Lora',serif; font-size:12px; font-weight:600; color:var(--blue); margin-bottom:4px;">${displayName(v.bookKey)} ${v.chapter}:${v.verse}</div>
+      <div style="font-size:12px; color:var(--text-mid); font-style:italic; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${v.text || ''}</div>
+    `;
+    el.onmouseenter = () => { el.style.borderColor = 'var(--blue-mid)'; el.style.background = 'var(--blue-light)'; };
+    el.onmouseleave = () => { el.style.borderColor = 'var(--border)'; el.style.background = 'var(--bg)'; };
+    el.onclick = () => goToVerse(v.bookKey, v.chapter, v.verse, true);
+    container.appendChild(el);
+  };
+  make(adjacentVerses.prev, 'Prev verse');
+  make(adjacentVerses.next, 'Next verse');
+}
+function renderVerses() {
+  const area = document.getElementById('verse-area');
+  const empty = document.getElementById('empty-state');
+  area.innerHTML = '';
+
+  if (!currentVerse && verseHistory.length === 0) {
+    empty.style.display = 'flex';
+    return;
+  }
+  empty.style.display = 'none';
+
+  if (currentVerse) {
+    const card = document.createElement('div');
+    card.className = 'verse-card current';
+    if (currentVerse.aiMatch) card.classList.add('ai-match');
+    const ref = formatRef(currentVerse);
+    const bodyContent = currentVerse.text
+      ? currentVerse.text
+      : '<span class="loading">Fetching verse...</span>';
+    const badge = currentVerse.aiMatch
+      ? `<div class="badge-ai" title="Detected from sermon context by AI">AI match</div>`
+      : `<div class="badge-live">Live</div>`;
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="verse-ref">${ref}</div>
+        ${badge}
+      </div>
+      <div class="verse-body${currentVerse.text ? '' : ' loading'}" id="current-text">${bodyContent}</div>
+      <div class="nav-row">
+        <button class="nav-btn" onclick="navVerse(-1)">Prev verse</button>
+        <div class="nav-sep"></div>
+        <button class="nav-btn" onclick="navChapter(-1)">Prev ch.</button>
+        <div class="nav-sep"></div>
+        <button class="nav-btn" onclick="navChapter(1)">Next ch.</button>
+        <div class="nav-sep"></div>
+        <button class="nav-btn" onclick="navVerse(1)">Next verse</button>
+      </div>`;
+    area.appendChild(card);
+
+    // Adjacent verse preview strip
+    if (currentVerse.text) {
+      const strip = document.createElement('div');
+      strip.id = 'adjacent-strip';
+      strip.style.cssText = 'display:flex; gap:8px; margin-bottom:12px;';
+      area.appendChild(strip);
+      renderAdjacentStrip(strip);
+    }
+  }
+
+  if (verseHistory.length > 0) {
+    const lbl = document.createElement('div');
+    lbl.className = 'section-label';
+    lbl.textContent = 'Earlier in this service';
+    area.appendChild(lbl);
+
+    [...verseHistory].reverse().forEach((v, ri) => {
+      const idx = verseHistory.length - 1 - ri;
+      const card = document.createElement('div');
+      card.className = 'hist-card';
+      card.innerHTML = `<div class="hist-ref">${formatRef(v)}</div><div class="hist-text">${v.text || ''}</div>`;
+      card.onclick = () => jumpToHistory(idx);
+      area.appendChild(card);
+    });
+  }
+
+  area.scrollTop = 0;
+}
+
+function jumpToHistory(idx) {
+  const v = verseHistory[idx];
+  if (!v) return;
+  if (currentVerse?.text) verseHistory.push({ ...currentVerse });
+  verseHistory.splice(idx, 1);
+  currentVerse = { ...v };
+  renderVerses();
+  setStatus(`${formatRef(currentVerse)}`, 'live');
+}
+
+// ────────────────────────────────────────────────────────────
+// SPEECH RECOGNITION
+// ────────────────────────────────────────────────────────────
+function toggleListening() {
+  isListening ? stopListening() : startListening();
+}
+
+function startListening() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    setStatus('Speech recognition not supported. Use Chrome.', 'error');
+    toast('Use Chrome or Safari for listening');
+    return;
+  }
+
+  recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+  recognition.maxAlternatives = 5;
+
+  recognition.onstart = () => {
+    isListening = true;
+    setListeningUI(true);
+    // Show speaker tip once per session
+    const tip = document.getElementById('speaker-tip');
+    tip.style.display = 'flex';
+  };
+
+  recognition.onresult = (event) => {
+    let interim = '', finalText = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const t = event.results[i][0].transcript;
+      if (event.results[i].isFinal) finalText += t + ' ';
+      else interim += t;
+    }
+
+    const display = (finalText || interim).trim();
+    updateTranscript(display);
+
+    // Try final result with all alternatives (pattern matching)
+    if (finalText.trim()) {
+      const last = event.results[event.results.length - 1];
+      let detected = null;
+      for (let i = 0; i < last.length; i++) {
+        detected = detectVerse(last[i].transcript);
+        if (detected) break;
+      }
+      if (detected) {
+        handleDetected(detected);
+      } else {
+        // No pattern match — feed to AI buffer
+        aiBuffer += ' ' + finalText.trim();
+        // Keep buffer to last ~400 chars (recent sermon context)
+        if (aiBuffer.length > 400) aiBuffer = aiBuffer.slice(-400);
+        scheduleAiCheck();
+      }
+    } else if (interim) {
+      // Fast path: check interim for explicit references and navigation
+      const nav = detectVerse(interim);
+      if (nav?.action) handleDetected(nav);
+      else if (nav && !nav.action) handleDetected(nav); // explicit ref in interim
+    }
+  };
+
+  recognition.onerror = (e) => {
+    if (e.error === 'no-speech') return;
+    if (e.error === 'not-allowed') {
+      setStatus('Microphone access denied', 'error');
+      toast('Please allow microphone access');
+      stopListening();
+    }
+  };
+
+  recognition.onend = () => {
+    if (isListening) {
+      try { recognition.start(); } catch(e) {}
+    }
+  };
+
+  try { recognition.start(); }
+  catch(e) { setStatus('Could not start microphone', 'error'); }
+}
+
+function stopListening() {
+  isListening = false;
+  if (recognition) { try { recognition.stop(); } catch(e) {} recognition = null; }
+  setListeningUI(false);
+  document.getElementById('transcript-wrap').classList.remove('active');
+  document.getElementById('speaker-tip').style.display = 'none';
+  clearTimeout(aiDebounceTimer);
+  aiBuffer = '';
+  lastAiText = '';
+  if (!currentVerse) setStatus('Tap the mic to start listening');
+  else setStatus(`${formatRef(currentVerse)}`);
+}
+
+function setListeningUI(on) {
+  const btn = document.getElementById('mic-btn');
+  const label = document.getElementById('mic-label');
+  const hint = document.getElementById('mic-hint');
+  const off = document.getElementById('mic-svg-off');
+  const on2 = document.getElementById('mic-svg-on');
+
+  if (on) {
+    btn.classList.add('listening');
+    label.textContent = 'Listening...';
+    hint.textContent = 'Tap to stop';
+    off.style.display = 'none';
+    on2.style.display = 'block';
+    setStatus('Listening for Bible verses', 'live');
+  } else {
+    btn.classList.remove('listening');
+    label.textContent = 'Start Listening';
+    hint.textContent = 'Detects verses automatically';
+    off.style.display = 'block';
+    on2.style.display = 'none';
+    setStatus('Tap the mic to start listening');
+  }
+}
+
+function updateTranscript(text) {
+  if (!text) return;
+  const wrap = document.getElementById('transcript-wrap');
+  const div = document.getElementById('transcript-text');
+  wrap.classList.add('active');
+
+  // Highlight detected book names
+  let html = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  for (const { alias } of ALIAS_LIST) {
+    const re = new RegExp(`\\b(${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})\\b`, 'gi');
+    html = html.replace(re, '<span class="hit">$1</span>');
+  }
+  div.innerHTML = html;
+}
+
+function handleDetected(detected) {
+  if (detected.action) {
+    if (detected.action === 'confirm') {
+      // "yes" - auto-select top candidate if picker is open
+      const picker = document.getElementById('candidate-picker');
+      if (picker) {
+        const first = picker.querySelector('button');
+        if (first) first.click();
+      }
+      return;
+    }
+    if (detected.action === 'gotoVerse') {
+      if (!currentVerse) return;
+      goToVerse(currentVerse.bookKey, currentVerse.chapter, detected.verse, false);
+      return;
+    }
+    if (detected.action === 'gotoChapter') {
+      if (!currentVerse) return;
+      goToVerse(currentVerse.bookKey, detected.chapter, 1, false);
+      return;
+    }
+    if (!currentVerse) return;
+    const actions = {
+      next: () => navVerse(1),
+      prev: () => navVerse(-1),
+      nextCh: () => navChapter(1),
+      prevCh: () => navChapter(-1)
+    };
+    actions[detected.action]?.();
+    return;
+  }
+
+  const key = `${detected.bookKey}${detected.chapter}:${detected.verse}`;
+  if (key === lastDetectedKey) return;
+  lastDetectedKey = key;
+  goToVerse(detected.bookKey, detected.chapter, detected.verse, true, detected.aiMatch || false);
+  setTimeout(() => { if (lastDetectedKey === key) lastDetectedKey = ''; }, 4000);
+}
+
+// ────────────────────────────────────────────────────────────
+// AI CONTEXT DETECTION ENGINE
+// ────────────────────────────────────────────────────────────
+function scheduleAiCheck() {
+  if (!aiEnabled) return;
+  clearTimeout(aiDebounceTimer);
+  aiDebounceTimer = setTimeout(runAiDetection, 2000);
+}
+
+async function runAiDetection() {
+  const text = aiBuffer.trim();
+  if (!text || text === lastAiText || isAiChecking || isFetching) return;
+  if (text.split(' ').length < 5) return;
+
+  // If no proxy configured, skip AI silently
+  if (!AI_PROXY_URL || AI_PROXY_URL.includes('YOUR-NAME')) return;
+
+  isAiChecking = true;
+  lastAiText = text;
+  setStatus('AI scanning context...', 'live');
+
+  try {
+    const response = await fetch(AI_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+
+    if (!response.ok) {
+      console.warn('AI proxy error:', response.status);
+      setStatus(currentVerse ? formatRef(currentVerse) : 'Listening...', isListening ? 'live' : '');
+      isAiChecking = false;
+      return;
+    }
+
+    const data = await response.json();
+    // Worker returns raw Anthropic response — parse it
+    const raw = (data.content?.[0]?.text || '').trim().replace(/```json|```/g, '');
+
+    let result;
+    try { result = JSON.parse(raw); } catch { result = { found: false }; }
+
+    if (result.found && result.matches?.length > 0) {
+      const highConf = result.matches.filter(m => m.confidence === 'high');
+      const final = highConf.length > 0 ? highConf : result.matches;
+
+      if (final.length === 1) {
+        const m = final[0];
+        const bookKey = resolveBookKey(m.book);
+        if (bookKey) handleDetected({ bookKey, chapter: m.chapter, verse: m.verse, aiMatch: true, reason: m.reason });
+      } else if (final.length > 1) {
+        candidateVerses = final.map(m => ({ bookKey: resolveBookKey(m.book), chapter: m.chapter, verse: m.verse, reason: m.reason })).filter(m => m.bookKey);
+        if (candidateVerses.length > 0) showCandidatePicker();
+      }
+      aiBuffer = '';
+    } else {
+      setStatus(currentVerse ? formatRef(currentVerse) : 'Listening for Bible verses', isListening ? 'live' : '');
+    }
+  } catch (e) {
+    console.warn('AI detection error:', e);
+    setStatus(currentVerse ? formatRef(currentVerse) : 'Listening for Bible verses', isListening ? 'live' : '');
+  }
+
+  isAiChecking = false;
+}
+
+function resolveBookKey(bookName) {
+  if (!bookName) return null;
+  const normalized = bookName.toLowerCase().trim();
+  // Direct key match
+  for (const key of Object.keys(BOOK_API)) {
+    if (key.toLowerCase() === normalized) return key;
+  }
+  // Alias match
+  for (const { alias, bookKey } of ALIAS_LIST) {
+    if (alias === normalized) return bookKey;
+  }
+  // Partial match on display name
+  for (const key of Object.keys(BOOK_API)) {
+    if (displayName(key).toLowerCase() === normalized) return key;
+  }
+  return null;
+}
+
+function showCandidatePicker() {
+  // Remove any existing picker
+  const old = document.getElementById('candidate-picker');
+  if (old) old.remove();
+
+  const picker = document.createElement('div');
+  picker.id = 'candidate-picker';
+  picker.style.cssText = `
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+    background: #fff; border: 2px solid var(--blue); border-radius: 18px;
+    box-shadow: 0 8px 40px rgba(37,99,235,0.22); z-index: 300;
+    padding: 14px 16px; min-width: 280px; max-width: 90vw;
+    animation: slideUp 0.3s cubic-bezier(0.16,1,0.3,1);
+  `;
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--blue); margin-bottom:10px;';
+  title.textContent = 'AI found possible matches';
+  picker.appendChild(title);
+
+  for (const cand of candidateVerses) {
+    const btn = document.createElement('button');
+    const ref = `${displayName(cand.bookKey)} ${cand.chapter}:${cand.verse}`;
+    btn.style.cssText = `
+      display:block; width:100%; text-align:left; padding:10px 12px; margin-bottom:6px;
+      border-radius:12px; border:1.5px solid var(--border); background:var(--bg);
+      cursor:pointer; font-family:'IBM Plex Sans',sans-serif; transition:all 0.16s;
+    `;
+    btn.innerHTML = `<div style="font-family:'Lora',serif; font-size:15px; font-weight:600; color:var(--blue);">${ref}</div>
+      <div style="font-size:11px; color:var(--text-dim); margin-top:2px; font-style:italic;">"${cand.reason || ''}"</div>`;
+    btn.onmouseover = () => { btn.style.background = 'var(--blue-light)'; btn.style.borderColor = 'var(--blue-mid)'; };
+    btn.onmouseout = () => { btn.style.background = 'var(--bg)'; btn.style.borderColor = 'var(--border)'; };
+    btn.onclick = () => {
+      picker.remove();
+      handleDetected({ bookKey: cand.bookKey, chapter: cand.chapter, verse: cand.verse, aiMatch: true });
+    };
+    picker.appendChild(btn);
+  }
+
+  const dismiss = document.createElement('button');
+  dismiss.style.cssText = `
+    display:block; width:100%; text-align:center; padding:8px; margin-top:2px;
+    border:none; background:none; font-size:12px; color:var(--text-dim); cursor:pointer;
+    font-family:'IBM Plex Sans',sans-serif;
+  `;
+  dismiss.textContent = 'Dismiss';
+  dismiss.onclick = () => picker.remove();
+  picker.appendChild(dismiss);
+
+  document.body.appendChild(picker);
+  // Auto-dismiss after 12 seconds
+  setTimeout(() => { if (picker.parentNode) picker.remove(); }, 12000);
+}
+
+// ────────────────────────────────────────────────────────────
+// SEARCH SHEET
+// ────────────────────────────────────────────────────────────
+function openSearch() {
+  sheetMode = 'search';
+  document.getElementById('sheet-title').textContent = 'Search';
+  document.getElementById('search-box-wrap').style.display = '';
+  document.getElementById('search-results').innerHTML = '<div style="padding:20px 12px; color:var(--text-dim); font-size:13px;">Type a verse reference above (e.g. John 3:16)</div>';
+  document.getElementById('index-content').innerHTML = '';
+  openSheet();
+  setTimeout(() => document.getElementById('search-input').focus(), 350);
+}
+
+function openIndex() {
+  sheetMode = 'index';
+  document.getElementById('sheet-title').textContent = 'Bible Books';
+  document.getElementById('search-box-wrap').style.display = 'none';
+  document.getElementById('search-results').innerHTML = '';
+  renderIndex();
+  openSheet();
+}
+
+function renderIndex() {
+  const el = document.getElementById('index-content');
+  const makeSection = (title, books) => {
+    const sec = document.createElement('div');
+    sec.className = 'book-section';
+    sec.innerHTML = `<div class="book-section-title">${title}</div>`;
+    const grid = document.createElement('div');
+    grid.className = 'book-grid';
+    for (const bk of books) {
+      const btn = document.createElement('button');
+      btn.className = 'book-item';
+      btn.textContent = displayName(bk);
+      btn.onclick = () => {
+        closeSheet();
+        goToVerse(bk, 1, 1, true);
+      };
+      grid.appendChild(btn);
+    }
+    sec.appendChild(grid);
+    return sec;
+  };
+  el.innerHTML = '';
+  el.appendChild(makeSection('Old Testament', OT_BOOKS));
+  el.appendChild(makeSection('New Testament', NT_BOOKS));
+}
+
+function onSearchInput() {
+  const val = document.getElementById('search-input').value.trim();
+  const results = document.getElementById('search-results');
+
+  if (!val) {
+    results.innerHTML = '<div style="padding:20px 12px; color:var(--text-dim); font-size:13px;">Type a verse reference (e.g. John 3:16)</div>';
+    return;
+  }
+
+  const detected = detectVerse(val);
+  if (detected && !detected.action) {
+    const ref = `${displayName(detected.bookKey)} ${detected.chapter}:${detected.verse}`;
+    results.innerHTML = `
+      <div class="search-result-item" onclick="doSearchGo('${detected.bookKey}',${detected.chapter},${detected.verse})">
+        <div class="sr-ref">${ref}</div>
+        <div class="sr-hint">Tap to open</div>
+      </div>`;
+  } else {
+    // Book name partial match
+    const q = val.toLowerCase();
+    const matches = [];
+    for (const bk of [...OT_BOOKS, ...NT_BOOKS]) {
+      if (displayName(bk).toLowerCase().includes(q) || bk.toLowerCase().includes(q)) {
+        matches.push(bk);
+      }
+    }
+    if (matches.length > 0) {
+      results.innerHTML = matches.slice(0, 8).map(bk =>
+        `<div class="search-result-item" onclick="doSearchGo('${bk}',1,1)">
+          <div class="sr-ref">${displayName(bk)}</div>
+          <div class="sr-hint">Open chapter 1</div>
+        </div>`
+      ).join('');
+    } else {
+      results.innerHTML = `<div style="padding:20px 12px; color:var(--text-dim); font-size:13px;">No match. Try "Romans 8:28" or "Psalm 23".</div>`;
+    }
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// BOOK > CHAPTER > VERSE DRILLDOWN
+// ────────────────────────────────────────────────────────────
+let drillBook = null;
+let drillChapter = null;
+
+// Verse counts per book (approximate, sufficient for display)
+const VERSE_COUNTS = {
+  'Genesis':[31,25,24,26,32,22,24,22,29,32,32,20,18,24,21,16,27,33,38,18,34,24,20,67,34,35,46,22,35,43,55,32,20,31,29,43,36,30,23,23,57,38,34,34,28,34,31,22,33,26],
+  'Exodus':[22,25,22,31,23,30,25,32,35,29,10,51,22,31,27,36,16,27,25,26,36,31,33,18,40,37,21,43,46,38,18,35,23,35,35,38,29,31,43,38],
+  'Leviticus':[17,16,17,35,19,30,38,36,24,20,47,8,59,57,33,34,16,30,24,16,15,5,11,28,41,29,25,21],
+  'Numbers':[54,34,51,49,31,27,89,26,23,36,35,16,33,45,41,50,13,32,22,29,35,41,30,25,18,65,23,31,40,16,54,42,56,29,34,13],
+  'Deuteronomy':[46,37,29,49,33,25,26,20,29,22,32,32,18,29,23,22,20,22,21,20,23,30,25,22,19,19,26,68,29,20,30,52,29,12],
+  'Joshua':[18,24,17,24,15,27,26,35,27,43,23,24,33,15,63,10,18,28,51,9,45,34,16,33],
+  'Judges':[36,23,31,24,31,40,25,35,57,18,40,15,25,20,20,31,13,31,30,48,25],
+  'Ruth':[22,23,18,22],
+  '1Samuel':[28,36,21,22,12,21,17,22,27,27,15,25,23,52,35,23,58,30,24,42,15,23,29,22,44,25,12,25,11,31,13],
+  '2Samuel':[27,32,39,12,25,23,29,18,13,19,27,31,39,33,37,23,29,33,43,26,22,51,39,25],
+  '1Kings':[53,46,28,34,18,38,51,66,28,29,43,33,34,31,34,34,24,46,21,43,29,53],
+  '2Kings':[18,25,27,44,27,33,20,29,37,36,21,21,25,29,38,20,41,37,37,21,26,20,37,20,30],
+  '1Chronicles':[54,55,24,43,26,81,40,40,44,14,47,40,14,17,29,43,27,17,19,8,30,19,32,31,31,32,34,21,30],
+  '2Chronicles':[17,18,17,22,14,42,22,18,31,19,23,16,22,15,19,14,19,34,11,37,20,12,21,27,28,23,9,27,36,27,21,33,25,33,27,23],
+  'Ezra':[11,70,13,24,17,22,28,36,15,44],
+  'Nehemiah':[11,20,32,23,19,19,73,18,38,39,36,47,31],
+  'Esther':[22,23,15,17,14,14,10,17,32,3],
+  'Job':[22,13,26,21,27,30,21,22,35,22,20,25,28,22,35,22,16,21,29,29,34,30,17,25,6,14,23,28,25,31,40,22,33,37,16,33,24,41,30,24,34,17],
+  'Psalms':[6,12,8,8,12,10,17,9,20,18,7,8,6,7,5,11,15,50,14,9,13,31,6,10,22,12,14,9,11,13,25,11,22,23,28,13,40,23,14,18,14,12,5,27,18,12,10,15,21,23,21,11,7,9,24,14,12,12,18,14,9,13,12,11,14,20,8,36,37,6,24,20,28,23,11,13,21,72,13,20,17,8,19,13,14,17,7,19,53,17,16,16,5,23,11,13,12,9,9,5,8,28,22,35,45,48,43,13,31,7,10,10,9,8,18,19,2,29,176,7,8,9,4,8,5,6,5,6,8,8,3,18,3,3,21,26,9,8,24,13,10,7,12,15,21,10,20,14,9,6],
+  'Proverbs':[33,22,35,27,23,35,27,36,18,32,31,28,25,35,33,33,28,24,29,30,31,29,35,34,28,28,27,28,27,33,31],
+  'Ecclesiastes':[18,26,22,16,20,12,29,17,18,20,10,14],
+  'SongOfSolomon':[17,17,11,16,16,13,13,14],
+  'Isaiah':[31,22,26,6,30,13,25,22,21,34,16,6,22,32,9,14,14,7,25,6,17,25,18,23,12,21,13,29,24,33,9,20,24,17,10,22,38,22,8,31,29,25,28,28,25,13,15,22,26,11,23,15,12,17,13,12,21,14,21,22,11,12,19,12,25,24],
+  'Jeremiah':[19,37,25,31,31,30,34,22,26,25,23,17,27,22,21,21,27,23,15,18,14,30,40,10,38,24,22,17,32,24,40,44,26,22,19,32,21,28,18,16,18,22,13,30,5,28,7,47,39,46,64,34],
+  'Lamentations':[22,22,66,22,22],
+  'Ezekiel':[28,10,27,17,17,14,27,18,11,22,25,28,23,23,8,63,24,32,14,49,32,31,49,27,17,21,36,26,21,26,18,32,33,31,15,38,28,23,29,49,26,20,27,31,25,24,23,35],
+  'Daniel':[21,49,30,37,31,28,28,27,27,21,45,13],
+  'Hosea':[11,23,5,19,15,11,16,14,17,15,12,14,16,9],
+  'Joel':[20,32,21],
+  'Amos':[15,16,15,13,27,14,17,14,15],
+  'Obadiah':[21],
+  'Jonah':[17,10,10,11],
+  'Micah':[16,13,12,13,15,16,20],
+  'Nahum':[15,13,19],
+  'Habakkuk':[17,20,19],
+  'Zephaniah':[18,15,20],
+  'Haggai':[15,23],
+  'Zechariah':[21,13,10,14,11,15,14,23,17,12,17,14,9,21],
+  'Malachi':[14,17,18,6],
+  'Matthew':[25,23,17,25,48,34,29,34,38,42,30,50,58,36,39,28,27,35,30,34,46,46,39,51,46,75,66,20],
+  'Mark':[45,28,35,41,43,56,37,38,50,52,33,44,37,72,47,20],
+  'Luke':[80,52,38,44,39,49,50,56,62,42,54,59,35,35,32,31,37,43,48,47,38,71,56,53],
+  'John':[51,25,36,54,47,71,53,59,41,42,57,50,38,31,27,33,26,40,42,31,25],
+  'Acts':[26,47,26,37,42,15,60,40,43,48,30,25,52,28,41,40,34,28,41,38,40,30,35,27,27,32,44,31],
+  'Romans':[32,29,31,25,21,23,25,39,33,21,36,21,14,26,33,24],
+  '1Corinthians':[31,16,23,21,13,20,40,13,27,33,34,31,13,40,58,24],
+  '2Corinthians':[24,17,18,18,21,18,16,24,15,18,33,21,14],
+  'Galatians':[24,21,29,31,26,18],
+  'Ephesians':[23,22,21,28,22,21],
+  'Philippians':[30,30,21,23],
+  'Colossians':[29,23,25,18],
+  '1Thessalonians':[10,20,13,18,28],
+  '2Thessalonians':[12,17,18],
+  '1Timothy':[20,15,16,16,25,21],
+  '2Timothy':[18,26,17,22],
+  'Titus':[16,15,15],
+  'Philemon':[25],
+  'Hebrews':[14,18,19,16,14,20,28,13,28,39,40,29,25],
+  'James':[27,26,18,17,20],
+  '1Peter':[25,25,22,19,14],
+  '2Peter':[21,22,18],
+  '1John':[10,29,24,21,21],
+  '2John':[13],
+  '3John':[14],
+  'Jude':[25],
+  'Revelation':[20,29,22,11,14,17,17,13,21,11,19,17,18,20,8,21,18,24,21,15,27,21]
+};
+
+function getVerseCount(bookKey, chapter) {
+  const counts = VERSE_COUNTS[bookKey];
+  if (!counts) return 30;
+  return counts[chapter - 1] || 30;
+}
+
+function getChapterCount(bookKey) {
+  const counts = VERSE_COUNTS[bookKey];
+  return counts ? counts.length : 30;
+}
+
+function openSearch() {
+  drillBook = null;
+  drillChapter = null;
+  renderDrillTab('book');
+  openSheet();
+  setTimeout(() => document.getElementById('search-input').focus(), 350);
+}
+
+function openIndex() {
+  openSearch();
+}
+
+function goToTab(tab) {
+  if (tab === 'chapter' && !drillBook) return;
+  if (tab === 'verse' && (!drillBook || !drillChapter)) return;
+  renderDrillTab(tab);
+}
+
+function renderDrillTab(tab) {
+  // Update tab active states
+  ['book','chapter','verse'].forEach(t => {
+    const el = document.getElementById('tab-' + t);
+    el.classList.toggle('active', t === tab);
+    el.disabled = (t === 'chapter' && !drillBook) || (t === 'verse' && (!drillBook || !drillChapter));
+  });
+
+  // Update chips
+  const chips = document.getElementById('drill-chips');
+  chips.innerHTML = '';
+  if (drillBook) {
+    const c = document.createElement('span');
+    c.className = 'drill-chip';
+    c.textContent = displayName(drillBook);
+    c.onclick = () => { drillChapter = null; renderDrillTab('book'); };
+    chips.appendChild(c);
+  }
+  if (drillChapter) {
+    const c = document.createElement('span');
+    c.className = 'drill-chip';
+    c.textContent = drillChapter;
+    c.onclick = () => renderDrillTab('chapter');
+    chips.appendChild(c);
+  }
+
+  // Show/hide search box
+  document.getElementById('search-box-wrap').style.display = tab === 'book' ? '' : 'none';
+  if (tab === 'book') document.getElementById('search-input').value = '';
+
+  const content = document.getElementById('drill-content');
+  content.innerHTML = '';
+
+  if (tab === 'book') {
+    renderBookList(content, '');
+  } else if (tab === 'chapter') {
+    renderChapterGrid(content);
+  } else if (tab === 'verse') {
+    renderVerseGrid(content);
+  }
+}
+
+function renderBookList(container, filter) {
+  const allBooks = [...OT_BOOKS, ...NT_BOOKS];
+  const q = filter.toLowerCase();
+
+  const filtered = q
+    ? allBooks.filter(bk => displayName(bk).toLowerCase().includes(q))
+    : allBooks;
+
+  // Check if input looks like a full reference (e.g. "John 3:16")
+  if (q) {
+    const detected = detectVerse(filter);
+    if (detected && !detected.action) {
+      const refEl = document.createElement('div');
+      refEl.style.cssText = 'padding:12px 8px; border-bottom:1px solid var(--border); cursor:pointer; background:var(--blue-light);';
+      refEl.innerHTML = `<div style="font-family:'Lora',serif; font-size:15px; font-weight:600; color:var(--blue);">${displayName(detected.bookKey)} ${detected.chapter}:${detected.verse}</div><div style="font-size:12px;color:var(--text-dim);margin-top:2px;">Tap to open</div>`;
+      refEl.onclick = () => { closeSheet(); goToVerse(detected.bookKey, detected.chapter, detected.verse, true); };
+      container.appendChild(refEl);
+    }
+  }
+
+  const makeSection = (label, books) => {
+    if (books.length === 0) return;
+    const lbl = document.createElement('div');
+    lbl.className = 'testament-label';
+    lbl.textContent = label;
+    container.appendChild(lbl);
+    books.forEach(bk => {
+      const el = document.createElement('div');
+      el.className = 'book-list-item';
+      el.textContent = displayName(bk);
+      el.onclick = () => {
+        drillBook = bk;
+        drillChapter = null;
+        renderDrillTab('chapter');
+      };
+      container.appendChild(el);
+    });
+  };
+
+  if (q) {
+    makeSection('Books', filtered);
+  } else {
+    makeSection('Old Testament', OT_BOOKS);
+    makeSection('New Testament', NT_BOOKS);
+  }
+}
+
+function renderChapterGrid(container) {
+  const count = getChapterCount(drillBook);
+  const grid = document.createElement('div');
+  grid.className = 'number-grid';
+  for (let i = 1; i <= count; i++) {
+    const el = document.createElement('div');
+    el.className = 'number-item';
+    el.textContent = i;
+    el.onclick = () => {
+      drillChapter = i;
+      renderDrillTab('verse');
+    };
+    grid.appendChild(el);
+  }
+  container.appendChild(grid);
+}
+
+function renderVerseGrid(container) {
+  const count = getVerseCount(drillBook, drillChapter);
+  const grid = document.createElement('div');
+  grid.className = 'number-grid';
+  for (let i = 1; i <= count; i++) {
+    const el = document.createElement('div');
+    el.className = 'number-item';
+    el.textContent = i;
+    el.onclick = () => {
+      closeSheet();
+      goToVerse(drillBook, drillChapter, i, true);
+    };
+    grid.appendChild(el);
+  }
+  container.appendChild(grid);
+}
+
+function onSearchInput() {
+  const val = document.getElementById('search-input').value;
+  renderBookList(document.getElementById('drill-content'), val);
+}
+
+function doSearchGo(bookKey, chapter, verse) {
+  closeSheet();
+  goToVerse(bookKey, chapter, verse, true);
+}
+
+// ────────────────────────────────────────────────────────────
+// SHEET HELPERS
+// ────────────────────────────────────────────────────────────
+function openSheet() {
+  document.getElementById('backdrop').classList.add('open');
+  document.getElementById('sheet').classList.add('open');
+}
+
+function closeSheet() {
+  document.getElementById('backdrop').classList.remove('open');
+  document.getElementById('sheet').classList.remove('open');
+  const inp = document.getElementById('search-input');
+  if (inp) inp.value = '';
+}
+
+// ────────────────────────────────────────────────────────────
+// UI HELPERS
+// ────────────────────────────────────────────────────────────
+function setStatus(msg, state = '') {
+  document.getElementById('status-text').textContent = msg;
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot' + (state ? ' ' + state : '');
+}
+
+function toggleAi() {
+  aiEnabled = !aiEnabled;
+  const indicator = document.getElementById('ai-indicator');
+  const btn = document.getElementById('ai-toggle-btn');
+  if (aiEnabled) {
+    indicator.style.background = '#7c3aed';
+    btn.title = 'AI context detection ON';
+    toast('AI detection ON');
+  } else {
+    indicator.style.background = '#d1d5db';
+    btn.title = 'AI context detection OFF';
+    clearTimeout(aiDebounceTimer);
+    toast('AI detection OFF');
+  }
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+// ────────────────────────────────────────────────────────────
+// INIT
+// ────────────────────────────────────────────────────────────
+renderVerses();
+loadSession();
+</script>
+</body>
+</html>
+
